@@ -39,3 +39,6 @@ Thumbs.db
 # Secretos
 .env
 .kaggle/
+
+# Herramientas locales de desarrollo
+.claude/
