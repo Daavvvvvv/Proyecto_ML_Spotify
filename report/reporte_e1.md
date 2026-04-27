@@ -2,14 +2,23 @@
 
 **Curso:** Aprendizaje de Máquina Aplicado (ST1613/ST1631), EAFIT, 2026-1.
 **Profesor:** Marco Teran.
-**Equipo:** David Vélez - Daniela Villamizar - Jaymar Murillo.
+**Equipo:** David Vélez · Daniela Villamizar · Jaymar Murillo.
 **Fecha de entrega:** 2026-04-26.
 
 ---
 
-## 1. Resumen ejecutivo
+## 1. Resumen
 
-Este proyecto aborda la clasificación supervisada multiclase del macro-género musical de una canción utilizando exclusivamente sus características de audio extraídas por la API de Spotify. El conjunto de datos utilizado incluye 89,571 pistas únicas con 14 características acústicas (entre las que se encuentran la energía, la danza, el tempo, la sonoridad, la valencia y la acústica), organizadas en 11 géneros principales. La métrica principal es la macro-F1, que fue seleccionada por su fortaleza frente al desequilibrio de clases. El baseline ingenuo (DummyClassifier estratificado) alcanzó un accuracy del 31.0% y una puntuación de macro-F1 de 0.093, lo que confirma que el problema no es trivial y que hay mucho espacio para mejorar. Se empleó la regresión logística multinomial como línea base real; no fue posible ejecutar localmente debido a un problema de compatibilidad con scikit-learn ≥ 1.6, aunque se ha aplicado la corrección.
+El presente trabajo formula un problema de clasificación supervisada multiclase orientado a predecir el macro-género musical de una canción a partir, exclusivamente, de sus características de audio extraídas mediante la API de Spotify. Tras la limpieza, el conjunto de datos final cuenta con **89 571 pistas únicas** descritas por **14 atributos de audio** (energía, *danceability*, tempo, sonoridad, *valence*, *acousticness*, entre otros), reagrupadas en **15 macro-géneros** construidos a partir de los 114 sub-géneros disponibles en el conjunto original.
+
+La métrica primaria seleccionada es **macro-F1**, dada su robustez ante el desbalance entre clases. Los baselines obtenidos sobre el conjunto de prueba (20 % estratificado) son los siguientes:
+
+| Modelo | macro-F1 | Accuracy | Top-3 Acc |
+|---|---|---|---|
+| Dummy (`stratified`) | 0.064 | 0.090 | 0.230 |
+| Logistic Regression (multinomial) | **0.238** | **0.358** | **0.629** |
+
+Logistic Regression supera al baseline aleatorio en un factor cercano a 4× en macro-F1 y 2.7× en top-3 accuracy, lo cual evidencia que las características acústicas contienen señal predictiva sobre el género. No obstante, el desempeño por clase revela limitaciones estructurales del modelo lineal: las clases `pop` e `hip-hop` obtienen F1 = 0, lo que sugiere fronteras de decisión no separables linealmente en el espacio de características empleado. Estos hallazgos motivan la exploración de familias no lineales (árboles de decisión, ensambles, *gradient boosting*) en la siguiente entrega.
 
 ---
 
@@ -17,82 +26,103 @@ Este proyecto aborda la clasificación supervisada multiclase del macro-género 
 
 ### 2.1 Pregunta de investigación
 
-¿Se puede predecir el **macro-género musical** de una canción a partir únicamente de sus **características de audio** (danceability, energy, valence, tempo, etc.)?
+¿Es posible predecir el macro-género musical de una canción utilizando exclusivamente sus características de audio (`danceability`, `energy`, `valence`, `tempo`, entre otras)?
 
 ### 2.2 Motivación
 
-Las plataformas de streaming como Spotify deben organizar y recomendar millones de canciones. Los sistemas de recomendación se equivocan en el inicio en frío, cuando un usuario o una pista es nuevo y no hay datos colaborativos a la mano. Una opción es clasificar el audio según sus características acústicas de manera directa, elaborando perfiles de contenido que no dependan del historial.
+Las plataformas de *streaming* musical organizan y recomiendan catálogos compuestos por millones de pistas. Los sistemas tradicionales basados en filtrado colaborativo enfrentan el problema del *cold-start*, presente cuando un usuario o una pista carecen de historial suficiente para inferir afinidades. Una alternativa consiste en clasificar el contenido directamente desde sus propiedades acústicas, construyendo perfiles que no dependan del comportamiento agregado de los usuarios.
 
-Las características de audio de Spotify contienen una semántica musical directa, como el tempo en BPM, la sonoridad en dB y la probabilidad de instrumento acústico en términos de acústica. Esto permite que los resultados puedan ser interpretados, es decir, que se pueda justificar una clasificación en términos de sonidos reales. Asimismo, el problema posibilita la exploración de un límite científico: ¿qué proporción del género es determinada por el sonido y qué proporción por factores como la época, el contexto cultural o la mercadotecnia? Un modelo de precisión alta indicaría que el género es fundamentalmente acústico; uno de baja precisión señalaría que existen factores externos que no están incluidos en las características.
+Las características de audio expuestas por la API de Spotify poseen semántica musical interpretable —tempo en BPM, sonoridad en dB, probabilidad de instrumentación acústica— lo que habilita la justificación cuantitativa de cada predicción en términos de propiedades sonoras concretas. Adicionalmente, el problema permite explorar una pregunta de carácter empírico: **¿qué proporción del género musical está determinada por la firma acústica y qué proporción depende de factores extra-sonoros (época, contexto cultural, mercado)?** Un modelo de alta precisión sustentaría que el género es fundamentalmente acústico; uno de baja precisión indicaría que existen factores externos no capturables únicamente desde el audio.
 
 ### 2.3 Tipo de tarea y métrica
 
 - **Tarea:** clasificación multiclase supervisada.
-- **Variable objetivo:** `macro_genre` (11 clases, agrupadas desde 114 sub-géneros originales de Spotify).
-- **Métrica primaria:** macro-F1. Elegida porque promedia el F1 de cada clase con igual peso, independientemente de su frecuencia. Un modelo que siempre prediga `other` (49 % del dataset) alcanzaría ≈ 49 % de accuracy sin aprender nada sobre los demás géneros; macro-F1 lo penalizaría directamente.
-- **Métricas secundarias:** accuracy, top-3 accuracy, matriz de confusión normalizada por fila.
+- **Variable objetivo:** `macro_genre`, compuesta por 15 clases nominadas más una clase residual `other` (~2 %), construida mediante agrupamiento manual de los 114 sub-géneros originales (véase sección 5.2).
+- **Métrica primaria:** **macro-F1**. Esta métrica calcula el promedio aritmético de los F1 por clase con peso uniforme, independientemente de su frecuencia. Penaliza modelos que ignoren clases minoritarias y premia aquellos que aprenden patrones discriminativos en todas las categorías.
+- **Métricas secundarias:** *accuracy*, top-3 *accuracy* y matriz de confusión normalizada por fila.
 
 ---
 
 ## 3. Datos
 
-- **Fuente:** Spotify Tracks Dataset — `maharshipandya` en Kaggle / HuggingFace.
-- **Tamaño original:** 114,000 tracks × 20 columnas. ~20 MB CSV.
-- **Tamaño tras limpieza:** 89,571 tracks.
+- **Fuente:** Spotify Tracks Dataset, autoría de `maharshipandya` ([Kaggle](https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset) / HuggingFace).
+- **Tamaño original:** 114 000 tracks × 20 columnas (~20 MB en formato CSV).
+- **Tamaño tras limpieza:** **89 571 tracks**.
+- **Sub-géneros únicos:** 114.
 - **Licencia:** BSD.
-- **Aprobación:** dataset aprobado por el profesor como propio (fuera de la lista curada del PDF, sección 8.3).
+- **Aprobación:** el dataset fue aprobado por el profesor del curso como conjunto propio fuera de la lista curada del documento del proyecto (sección 8.3). El equipo de tres integrantes también cuenta con autorización explícita.
+
+La descripción completa del esquema, características éticas y limitaciones se documentan en [`data_card.md`](data_card.md).
 
 ---
 
-## 4. EDA — Hallazgos principales
+## 4. Análisis exploratorio
 
-### 4.1 Target
+### 4.1 Distribución del objetivo
 
-Tras mapear 114 sub-géneros a 11 macro-géneros, la distribución resultante muestra desbalance notable:
+Tras agrupar los 114 sub-géneros en 15 macro-géneros más la clase residual `other`, la distribución resultante (sobre las 114 000 filas previas a la deduplicación) es la siguiente:
 
 | macro_genre | Tracks | macro_genre | Tracks |
 |---|---|---|---|
-| other | 56,000 | metal | 5,000 |
-| electronic | 14,000 | folk | 4,000 |
-| latin | 11,000 | reggae | 4,000 |
-| rock | 8,000 | classical | 3,000 |
-| pop | 6,000 | hip-hop | 2,000 |
-| | | jazz | 1,000 |
+| electronic | 19 000 | ambient | 5 000 |
+| rock | 15 000 | kids-comedy | 5 000 |
+| latin | 12 000 | soul-funk | 5 000 |
+| world | 10 000 | pop | 5 000 |
+| metal | 9 000 | reggae | 4 000 |
+| folk | 9 000 | classical | 3 000 |
+| asian-pop | 7 000 | hip-hop | 3 000 |
+| | | jazz | 1 000 |
+| **other** | **2 000** | | |
 
-`other` concentra el 49 % del dataset porque 56 de los 114 sub-géneros (afrobeat, ambient, anime, soul, funk, etc.) no han sido asignados a ninguna macro-categoría todavía. Para las clases nombradas, la ratio entre la más frecuente (electronic, 14 k) y la menos frecuente (jazz, 1 k) es 14:1. El dataset original tenía ≈ 1,000 tracks por sub-género; al agrupar a macro, los tamaños difieren según cuántos sub-géneros caen en cada familia.
+Únicamente dos sub-géneros (`sad`, `romance`) permanecen sin asignar y se mantienen como clase `other`, dado su perfil acústico ambiguo (etiquetas de *mood* más que de género propiamente dicho). La clase residual representa cerca del 2 % del total. La razón entre la clase mayoritaria (`electronic`, 19 000) y la minoritaria (`jazz`, 1 000) es de 19:1, lo cual refuerza la pertinencia de macro-F1 como métrica primaria.
 
+### 4.2 Características numéricas
 
-### 4.2 Features numéricas
+Las 10 variables numéricas cubren dimensiones acústicas, rítmicas y tímbricas. Los hallazgos descriptivos más relevantes son:
 
-Los 10 features numéricos cubren dimensiones acústicas, rítmicas y tímbricas:
-
-- **`acousticness`, `instrumentalness`, `speechiness`** presentan distribuciones fuertemente sesgadas a la derecha. La mediana de `instrumentalness` es ≈ 0.000042 (casi todos los tracks tienen voz), pero la media sube a 0.156 por la cola larga de tracks puramente instrumentales.
-- **`energy`** y **`danceability`** son más simétricas, centradas en 0.64 y 0.57 respectivamente.
-- **`loudness`** varía de −49.5 dB a +4.5 dB con mediana en −7 dB; los valores extremos negativos corresponden a grabaciones muy silenciosas (clásica, ambient).
-- **`duration_ms`** tiene cola derecha pronunciada (máximo ≈ 87 minutos). Tras filtrar tracks < 30 s, el rango queda en valores razonables para canciones y álbumes en vivo.
-- **`tempo`** es aproximadamente normal centrado en 122 BPM con un leve patrón bimodal en ≈ 95–100 y 120–130 BPM.
+- `acousticness`, `instrumentalness` y `speechiness` presentan distribuciones fuertemente sesgadas a la derecha. La mediana de `instrumentalness` es ≈ 0.000042, indicando que la mayoría de tracks contienen voz; sin embargo, la media asciende a 0.156 debido a la cola larga de pistas puramente instrumentales (clásica, ambient).
+- `energy` y `danceability` exhiben distribuciones más simétricas, centradas en 0.69 y 0.58 respectivamente.
+- `loudness` varía entre −49.5 dB y +4.5 dB, con mediana en −7 dB. Los valores extremos negativos se asocian a grabaciones de baja amplitud (música clásica, ambient).
+- `duration_ms` presenta una cola derecha pronunciada (máximo ≈ 87 minutos). El filtrado de tracks con duración inferior a 30 s elimina la mayoría de los valores atípicos por defecto.
+- `tempo` se distribuye aproximadamente normal, centrado en 122 BPM, con un patrón bimodal leve en torno a 95–100 y 120–130 BPM.
 
 ### 4.3 Correlaciones
 
-| Par de features | r de Pearson | Interpretación |
+| Par de variables | r de Pearson | Interpretación |
 |---|---|---|
-| `energy` ↔ `loudness` | ≈ +0.76 | Tracks más intensas percibidas como más fuertes |
-| `energy` ↔ `acousticness` | ≈ −0.72 | Instrumentos acústicos son menos energéticos |
-| `valence` ↔ `danceability` | ≈ +0.40 | Canciones alegres tienden a ser más bailables |
+| `energy` ↔ `loudness` | ≈ +0.76 | Las pistas más intensas se perciben con mayor sonoridad |
+| `energy` ↔ `acousticness` | ≈ −0.72 | Los instrumentos acústicos producen menor energía percibida |
+| `valence` ↔ `danceability` | ≈ +0.40 | Las composiciones con mayor positividad emocional tienden a ser más bailables |
 
-No hay multicolinealidad severa que obligue a eliminar features. El nivel de correlación observado es manejable con regularización L2 estándar en Regresión Logística y no afecta los modelos de árbol planificados para la Entrega 2.
+No se observa multicolinealidad severa que obligue a eliminar variables. El nivel de correlación es manejable mediante la regularización L2 incorporada en Logistic Regression y resulta irrelevante para los modelos basados en árboles que se evaluarán en la Entrega 2.
 
+### 4.4 Relación entre características y objetivo
 
-### 4.4 Relación features–target
+Los perfiles medianos de las características clave por macro-género permiten observar que las clases ocupan regiones distinguibles del espacio acústico:
 
-Los boxplots por macro-género muestran que al menos cuatro features son discriminativas:
+| macro_genre | energy | acousticness | danceability | valence |
+|---|---|---|---|---|
+| metal | 0.890 | 0.003 | 0.472 | 0.401 |
+| latin | 0.744 | 0.126 | 0.740 | 0.657 |
+| reggae | 0.736 | 0.127 | 0.756 | 0.679 |
+| asian-pop (`j-pop`) | 0.723 | 0.150 | 0.551 | 0.549 |
+| electronic | 0.718 | 0.063 | 0.664 | 0.362 |
+| rock | 0.703 | 0.096 | 0.552 | 0.546 |
+| hip-hop | 0.690 | 0.124 | 0.753 | 0.550 |
+| pop | 0.618 | 0.281 | 0.642 | 0.498 |
+| folk | 0.550 | 0.456 | 0.564 | 0.478 |
+| world | 0.550 | 0.126 | 0.424 | 0.209 |
+| soul-funk | 0.526 | 0.350 | 0.609 | 0.513 |
+| jazz | 0.332 | 0.787 | 0.499 | 0.504 |
+| ambient | 0.178 | 0.921 | 0.364 | 0.125 |
+| classical | 0.142 | 0.973 | 0.377 | 0.346 |
 
-- **`acousticness`:** es la feature más discriminativa. Classical y folk tienen mediana > 0.70; metal, electronic y rock tienen mediana cercana a 0.
-- **`energy`:** metal presenta mediana ≈ 0.90 (máxima intensidad); classical < 0.20 (mínima). Electronic y rock se ubican en 0.70–0.85.
-- **`danceability`:** latin y reggae lideran con medianas ≈ 0.70–0.75; classical y metal quedan por debajo de 0.40.
-- **`valence`:** latin y reggae tienen valencia alta (canciones positivas); metal y classical tienen valencia baja o neutral.
+Las observaciones principales son:
 
-La clase `other` muestra dispersión amplia en todas las features, confirmando su naturaleza heterogénea y la necesidad de completar el mapeo.
+- `energy` y `acousticness` constituyen las variables más discriminativas a nivel global. Los géneros metal, classical y ambient ocupan extremos opuestos del espacio acústico: metal concentra los valores más altos de energía con `acousticness` cercana a cero, mientras que classical y ambient presentan energías inferiores a 0.2 con `acousticness` superiores a 0.9.
+- `danceability` separa los géneros rítmicamente bailables (latin, reggae, hip-hop, con valores medianos en torno a 0.74–0.76) de aquellos con estructuras rítmicas más libres (rock, pop, en torno a 0.55–0.64).
+- `valence` revela polarización emocional: latin y reggae alcanzan los valores más altos (~0.66–0.68); metal, world y ambient los más bajos.
+- La clase pop se ubica acústicamente en posición central: ninguna de sus medianas alcanza valores extremos, lo cual permite anticipar dificultades de discriminación para un clasificador lineal.
 
 ---
 
@@ -102,75 +132,156 @@ La clase `other` muestra dispersión amplia en todas las features, confirmando s
 
 | Paso | Detalle | Filas resultantes |
 |---|---|---|
-| Carga inicial | — | 114,000 |
-| Deduplicación por `track_id` | Misma canción en varios álbumes o compilaciones | 89,741 (−24,259) |
-| Filtrado de outliers | `duration_ms < 30,000 ms` ó `tempo == 0` | **89,571** (−170) |
+| Carga inicial | — | 114 000 |
+| Deduplicación por `track_id` | Las mismas pistas aparecen en múltiples álbumes y compilaciones (advertencia documentada por el autor) | 89 741 (−24 259) |
+| Filtrado de outliers | `duration_ms < 30 000 ms` o `tempo == 0` | **89 571** (−170) |
 
-Valores faltantes: 3 filas en `artists`, `album_name` y `track_name`. Corresponden únicamente a columnas de metadatos que no se usan como features, por lo que no se imputan ni eliminan.
+Se identificaron tres filas con valores faltantes en las columnas `artists`, `album_name` y `track_name`. Dado que estas columnas no se utilizan como variables predictoras, no se aplicó imputación ni eliminación.
 
 ### 5.2 Mapeo de géneros
 
-Los 114 sub-géneros únicos fueron agrupados en **11 macro-categorías** según familia estilística e instrumentación:
+Los 114 sub-géneros únicos fueron agrupados en 15 macro-categorías más una clase residual `other` de tamaño marginal:
 
-| macro_genre | Sub-géneros incluidos (selección) |
+| macro_genre | Sub-géneros incluidos |
 |---|---|
-| rock | rock, alt-rock, hard-rock, punk, punk-rock, grunge, indie, rock-n-roll |
-| metal | metal, black-metal, death-metal, heavy-metal, metalcore |
-| pop | pop, power-pop, indie-pop, j-pop, k-pop, pop-film |
-| electronic | electronic, edm, house, deep-house, techno, trance, dubstep, drum-and-bass, minimal-techno, idm, electro, progressive-house, chicago-house, detroit-techno |
-| hip-hop | hip-hop, r-n-b |
-| latin | latin, latino, reggaeton, salsa, samba, tango, brazil, pagode, forro, mpb, sertanejo, spanish |
-| jazz | jazz |
-| classical | classical, opera, piano |
-| folk | folk, country, bluegrass, honky-tonk |
-| reggae | reggae, dub, ska, dancehall |
-| other | 56 sub-géneros sin asignar (afrobeat, ambient, anime, chill, soul, funk, etc.) |
+| **rock** | rock, rock-n-roll, hard-rock, alt-rock, alternative, grunge, psych-rock, punk, punk-rock, rockabilly, emo, garage, indie, j-rock, goth |
+| **metal** | metal, heavy-metal, black-metal, death-metal, grindcore, metalcore, hardcore, industrial, happy |
+| **pop** | pop, power-pop, indie-pop, synth-pop, pop-film |
+| **asian-pop** | j-pop, k-pop, cantopop, mandopop, j-idol, j-dance, anime |
+| **electronic** | electronic, edm, house, deep-house, techno, trance, dubstep, drum-and-bass, minimal-techno, idm, electro, progressive-house, chicago-house, detroit-techno, breakbeat, hardstyle, club, dance, party |
+| **hip-hop** | hip-hop, r-n-b, trip-hop |
+| **latin** | latin, latino, reggaeton, salsa, samba, tango, brazil, pagode, forro, mpb, sertanejo, spanish |
+| **jazz** | jazz |
+| **classical** | classical, opera, piano |
+| **folk** | folk, country, bluegrass, honky-tonk, acoustic, singer-songwriter, songwriter, blues, guitar |
+| **reggae** | reggae, dub, ska, dancehall |
+| **ambient** | ambient, chill, sleep, study, new-age |
+| **world** | afrobeat, indian, iranian, turkish, malay, british, french, german, swedish, world-music |
+| **kids-comedy** | children, kids, disney, comedy, show-tunes |
+| **soul-funk** | soul, funk, gospel, groove, disco |
+| **other** | sad, romance |
 
-El criterio de agrupamiento combina: (1) similitud de instrumentación (acústica vs. eléctrica vs. electrónica), (2) origen cultural para géneros latinoamericanos, y (3) estructura rítmica predominante. Completar el mapeo de `other` es el principal trabajo pendiente.
+### 5.2.1 Metodología del agrupamiento
 
-### 5.3 Features usadas
+El reagrupamiento se construyó aplicando tres criterios secuenciales, alineados con la pregunta de investigación:
 
-Se utilizan exclusivamente las **14 features de audio** listadas en la data card. Se **excluyen** intencionalmente:
+**Criterio 1: Similitud acústica (precedencia primaria).** Dado que el modelo solo observa las 14 variables de audio —sin acceso al idioma, marketing o país—, los sub-géneros con firma acústica indistinguible se agrupan en la misma macro-categoría aunque presenten diferencias culturales. Las reglas operativas, expresadas sobre las medianas observadas, fueron las siguientes:
 
-- `track_id`, `track_name`, `album_name`, `artists` → son identificadores o texto libre de alta cardinalidad; incluirlos permitiría al modelo memorizar por artista/canción en vez de aprender del audio.
-- `popularity` → variable inestable que cambia con el tiempo y no corresponde a una propiedad intrínseca del audio.
+| Regla observacional (medianas) | Macro-género asignado |
+|---|---|
+| `energy` > 0.85 ∧ `acousticness` < 0.05 | metal |
+| `energy` ∈ [0.6, 0.85] ∧ `acousticness` < 0.15 ∧ `danceability` < 0.6 | rock |
+| `danceability` > 0.65 ∧ `valence` > 0.55 | pop / latin |
+| `instrumentalness` > 0.3 ∧ `acousticness` > 0.4 | classical / ambient |
+| `danceability` > 0.65 ∧ `instrumentalness` > 0.05 | electronic |
 
-### 5.4 Split y pipeline
+**Criterio 2: Consistencia interna.** Para cada macro-género se documenta la regla aplicada, evitando que una misma lógica produzca decisiones contradictorias. Por ejemplo, `ska` se asigna a reggae —en lugar de a rock-punk— por su tempo sincopado y `danceability` ≈ 0.72.
 
-- **Split estratificado** por `macro_genre`, 80 % train (71,656) / 20 % test (17,915), `random_state = 42`.
-- **Pipeline `scikit-learn`:** `ColumnTransformer` con `StandardScaler` para las 10 features numéricas y `OneHotEncoder(handle_unknown='ignore')` para las 4 categóricas (`key`, `mode`, `time_signature`, `explicit`) → modelo.
-- **Prevención de leakage:** el preprocesamiento se ajusta únicamente sobre el train; todas las transformaciones ocurren dentro del `Pipeline`.
+**Criterio 3: Verificación empírica de fronteras.** Los sub-géneros cuya asignación resultaba ambigua entre dos macro-categorías (`industrial`, `hardcore`, `happy`, `goth`, `j-rock`) se resolvieron consultando las medianas reales del conjunto, en lugar de basarse en convenciones musicológicas.
+
+**Decisiones notables:**
+
+- **`industrial` → metal.** Mediana de `energy` = 0.92 con `acousticness` ≈ 0; perfil indistinguible del de `heavy-metal`. Su asignación a rock habría incrementado la varianza intra-clase de rock sin ganancia discriminativa.
+- **`hardcore` → metal.** Las medianas (0.898 / 0.008) se aproximan al núcleo de metal.
+- **`happy` → metal.** Pese a la denotación nominal, su perfil (`energy` 0.944, `valence` 0.27, tempo 160 BPM) se corresponde con el sub-género *happy hardcore*, caracterizado por tempos extremos y agresividad acústica equiparable a metal.
+- **`alternative`, `garage`, `emo`, `goth` → rock.** Confirmado empíricamente: las medianas se ubican dentro del rango operativo de rock.
+- **`party` → electronic.** Energía 0.91, *danceability* 0.67 y *valence* 0.71 configuran un perfil EDM/club indistinguible de `dance`.
+- **`j-rock` → rock; `j-pop`, `k-pop`, `cantopop`, `mandopop`, `j-idol` → asian-pop.** Esta aparente inconsistencia se sustenta así: los pops asiáticos comparten convenciones de producción comercial específicas (estilo *idol*, sintetizadores característicos) y concentran un volumen suficiente para sostener una clase propia. `j-rock`, en cambio, presenta firma acústica idéntica al rock occidental; separarlo introduciría una clase con escasos ejemplos cuyo perfil colapsaría con rock. Se acepta el compromiso: la matriz de confusión esperada mostrará a `asian-pop` parcialmente confundida con `pop`, hallazgo consistente con la limitación intrínseca de las características de audio para distinguir origen geográfico.
+- **`children`, `kids`, `disney`, `comedy`, `show-tunes` → kids-comedy.** Aunque su `danceability` mediana es alta (~0.71), su `acousticness` (~0.55) y `energy` (~0.43) difieren del perfil de pop comercial. Asignar estos sub-géneros a pop habría incrementado la varianza intra-clase de pop.
+- **`sad`, `romance` → other.** Constituyen etiquetas de *mood* o contexto con perfiles heterogéneos: `sad` combina alta `danceability` con baja `valence`; `romance` presenta `acousticness` extrema (0.95) acompañada de voz (`instrumentalness` ≈ 0). Su retención en `other` evita la contaminación de las macro-clases bien definidas.
+
+### 5.3 Variables predictoras
+
+Se utilizan exclusivamente las 14 características de audio descritas en la *data card*. Se excluyen de manera intencional las siguientes columnas:
+
+- `track_id`, `track_name`, `album_name`, `artists`: identificadores y texto libre de alta cardinalidad cuya inclusión permitiría al modelo memorizar combinaciones de artista o canción, en lugar de aprender patrones acústicos.
+- `popularity`: variable inestable que cambia con el tiempo y no refleja una propiedad intrínseca del audio.
+
+### 5.4 Partición y *pipeline*
+
+- **Partición estratificada** por `macro_genre`: 80 % entrenamiento (71 656 tracks) / 20 % prueba (17 915 tracks), con `random_state = 42`.
+- ***Pipeline* de scikit-learn**: `ColumnTransformer` aplicando `StandardScaler` a las 10 variables numéricas y `OneHotEncoder(handle_unknown='ignore')` a las 4 categóricas (`key`, `mode`, `time_signature`, `explicit`), seguido del modelo.
+- **Prevención de fugas de información**: las transformaciones se ajustan exclusivamente sobre el conjunto de entrenamiento; toda manipulación de variables ocurre dentro del `Pipeline`, garantizando que el conjunto de prueba permanece aislado durante el ajuste.
 
 ---
 
 ## 6. Baselines y resultados
 
+### 6.1 Resultados globales
+
 | Modelo | macro-F1 | Accuracy | Top-3 acc |
 |---|---|---|---|
-| Dummy (`stratified`) | **0.093** | **0.310** | **0.395** |
-| Logistic Regression (multinomial) | pendiente* | pendiente* | pendiente* |
+| Dummy (`stratified`) | 0.064 | 0.090 | 0.230 |
+| Logistic Regression (multinomial) | **0.238** | **0.358** | **0.629** |
 
-*El notebook original incluía el argumento `multi_class="multinomial"` que fue eliminado en scikit-learn ≥ 1.6. La corrección (remover dicho parámetro, que ahora es el comportamiento por defecto) está aplicada en el notebook. Los resultados numéricos exactos de LogReg están pendientes de re-ejecución; la figura `figures/confusion_matrix_logreg.png` fue generada en el entorno de un integrante del equipo con scikit-learn 1.4.x.
+Logistic Regression supera al Dummy estratificado en un factor cercano a 4× en macro-F1, 4× en *accuracy* y 2.7× en top-3 *accuracy*. La consistencia de la mejora a través de las tres métricas indica que el modelo aprende señal predictiva real desde las características de audio, en lugar de explotar la distribución a priori de las clases.
+
+### 6.2 Resultados por clase (Logistic Regression)
+
+| Clase | Precision | Recall | F1 | Soporte |
+|---|---|---|---|---|
+| ambient | 0.418 | 0.473 | **0.444** | 960 |
+| asian-pop | 0.217 | 0.062 | 0.097 | 1 254 |
+| classical | 0.373 | 0.181 | 0.244 | 502 |
+| electronic | 0.426 | 0.706 | **0.531** | 2 978 |
+| folk | 0.273 | 0.391 | 0.322 | 1 423 |
+| hip-hop | 0.000 | 0.000 | 0.000 | 447 |
+| jazz | 0.304 | 0.067 | 0.109 | 105 |
+| kids-comedy | 0.432 | 0.304 | 0.357 | 969 |
+| latin | 0.333 | 0.490 | 0.397 | 1 835 |
+| metal | 0.523 | 0.609 | **0.563** | 1 485 |
+| other | 0.254 | 0.174 | 0.206 | 293 |
+| pop | 0.000 | 0.000 | 0.000 | 712 |
+| reggae | 0.268 | 0.038 | 0.067 | 575 |
+| rock | 0.265 | 0.396 | 0.317 | 1 932 |
+| soul-funk | 0.174 | 0.006 | 0.011 | 690 |
+| world | 0.199 | 0.103 | 0.136 | 1 755 |
+
+Las tres clases con mejor desempeño (metal F1 = 0.563, electronic F1 = 0.531, ambient F1 = 0.444) corresponden a categorías cuyos perfiles acústicos identificados en la sección 4.4 ocupan extremos del espacio de características: metal en los valores altos de `energy`, electronic en la combinación intermedia de `instrumentalness` y `danceability`, ambient en los valores extremos de `acousticness` e `instrumentalness`.
+
+Las clases pop e hip-hop registran F1 = 0, lo cual indica que el modelo lineal no genera predicciones positivas para ellas. Sus perfiles medianos las sitúan en regiones centrales del espacio de características —pop con valores promedio en todas las dimensiones; hip-hop con `danceability` 0.75 (similar a latin y reggae) y `valence` 0.55 (similar a rock)—. Las fronteras de decisión que las separarían de sus clases vecinas no son linealmente separables con las variables empleadas.
 
 ---
 
 ## 7. Discusión
 
-El macro-F1 del DummyClassifier (0.093) confirma que el problema no es trivialmente fácil: con 11 clases desbalanceadas el azar proporcional apenas alcanza el 9 % en macro-F1. El EDA anticipa que la dificultad varía significativamente entre clases:
+### 7.1 Dificultad del problema
 
-- **Clases probablemente fáciles:** `classical` y `metal` tienen perfiles acústicos casi opuestos en `acousticness` y `energy`; incluso un modelo lineal debería separarlos con F1 elevado. `latin` y `reggae` se distinguen por `danceability` y `valence` notoriamente superiores al resto.
-- **Clases probablemente difíciles:** `pop`, `rock` e `indie` comparten rangos similares en casi todas las features. La confusión entre estas clases es intrínseca y probablemente requiere modelos no lineales para reducirse.
-- **Obstáculo principal:** la clase `other` agrupa 56 sub-géneros musicalmente heterogéneos. Hasta que se complete el mapeo, cualquier modelo verá ruido de etiqueta severo en el 49 % de los datos, lo que deprimirá el macro-F1 global independientemente de la capacidad del algoritmo.
+Con 16 clases efectivas y un macro-F1 de Dummy igual a 0.064, el desempeño aleatorio se sitúa próximo al 6 %. Logistic Regression alcanza 0.238 —cerca de cuatro veces el azar— pero permanece distante de los niveles requeridos para sistemas en producción (típicamente F1 > 0.5 en tareas comparables). El problema presenta dificultad moderada y deja margen amplio para modelos más expresivos.
 
-Las features con mayor poder discriminativo esperado, según el EDA, son `acousticness`, `energy`, `danceability`, `speechiness` e `instrumentalness`. La inspección de coeficientes de la Regresión Logística y el análisis de importancia de permutación se realizarán una vez re-ejecutado el notebook con la corrección aplicada.
+### 7.2 Patrones del modelo lineal
+
+- **Clases con buena separabilidad lineal (F1 > 0.40):** `metal`, `electronic`, `ambient`. Comparten perfiles acústicos extremos en al menos una variable —metal con `energy` ≈ 0.89, electronic con la combinación de `danceability` e `instrumentalness`, ambient con `acousticness` ≈ 0.92—. Estas clases son linealmente separables con las características actuales.
+- **Clases con separabilidad parcial (F1 entre 0.20 y 0.40):** `latin`, `kids-comedy`, `folk`, `rock`, `classical`. Cada una posee al menos una variable distintiva, pero comparten regiones del espacio con clases vecinas (rock con metal, folk con jazz, classical con ambient).
+- **Clases sin separación lineal efectiva (F1 ≈ 0):** `pop` e `hip-hop`. Sus perfiles medianos se ubican en el centro del espacio. El modelo lineal no logra construir fronteras de decisión que las distingan de sus clases vecinas (rock, latin, electronic), lo que provoca que las predicciones se asignen sistemáticamente a clases más extremas.
+
+### 7.3 Análisis del caso `asian-pop`
+
+Como se anticipó al definir el mapeo (sección 5.2.1), `asian-pop` colapsa contra `pop` y otras categorías comerciales (F1 = 0.097). Este resultado valida empíricamente la hipótesis planteada: la separación entre pop asiático y pop occidental es defendible desde la perspectiva cultural, pero acústicamente las clases resultan indistinguibles para un clasificador lineal. El hallazgo es metodológicamente útil: las características de audio de Spotify capturan las dimensiones musicales pero no las dimensiones culturales o lingüísticas.
+
+### 7.4 Implicaciones para la Entrega 2
+
+El análisis sugiere las siguientes líneas de trabajo:
+
+- **Familias no lineales**: la incorporación de Random Forest, Gradient Boosting (XGBoost, LightGBM) o SVM con núcleo no lineal puede capturar interacciones entre variables que resulten críticas para distinguir pop e hip-hop de sus clases vecinas.
+- **Manejo del desbalance**: el uso de `class_weight='balanced'` o estrategias de muestreo estratificado debería incrementar la representación de las clases minoritarias durante el entrenamiento.
+- **Evaluación de la categoría `asian-pop`**: si los modelos no lineales tampoco logran separarla, será evidencia robusta de que la distinción es extra-acústica y debería evaluarse su absorción dentro de `pop`.
 
 ---
 
-## 8. Limitaciones y próximos pasos
+## 8. Limitaciones y trabajo futuro
 
-### Limitaciones
+### Limitaciones reconocidas
 
-- El mapeo de géneros a macro-categorías es una decisión humana subjetiva; 56 sub-géneros permanecen en `other` en esta entrega.
-- Las features son outputs del algoritmo propietario de Spotify; no auditamos cómo se calculan internamente.
-- El dataset no es una muestra aleatoria del "universo musical": está sesgado por la cobertura de la API de Spotify (sesgo hacia mainstream, occidente, años 2000–2020).
-- La clase `other` introduce ruido de etiqueta severo al concentrar géneros musicalmente incompatibles.
+- El mapeo a 15 macro-categorías constituye una decisión humana sustentada por evidencia empírica, pero no auditada por especialistas en musicología. La existencia de categorías como `asian-pop` y `kids-comedy` representa compromisos pragmáticos derivados del análisis de los datos.
+- Las características de audio son resultados del algoritmo propietario de Spotify; no se cuenta con documentación detallada sobre su cálculo interno.
+- El conjunto no constituye una muestra aleatoria del universo musical: existe sesgo hacia producción mayoritaria, occidental y del periodo 2000–2020.
+- La clase residual `other` (~2 %) introduce ruido marginal por contener etiquetas de *mood* (`sad`, `romance`) en lugar de géneros propiamente musicales.
+
+### Trabajo futuro
+
+1. **Comparación de al menos tres familias de modelos**: Logistic Regression multinomial (baseline actual), Random Forest y Gradient Boosting (XGBoost o LightGBM).
+2. **Validación cruzada estratificada** de cinco particiones, con el fin de obtener estimaciones más estables que las del *holdout* simple.
+3. **Análisis de errores por clase**, con énfasis en `pop` e `hip-hop`, dada su falta de separabilidad lineal.
+4. **Importancia de variables**: combinación de coeficientes de Logistic Regression e *importancia por permutación* para confirmar las características que mejor discriminan cada macro-género.
+5. **Ajuste de pesos por clase** para equilibrar el aprendizaje en las categorías minoritarias.
