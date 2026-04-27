@@ -5,11 +5,9 @@ Profesor: Marco Teran (`mtteranl@eafit.edu.co`).
 
 ## Equipo
 
-- [TODO: integrante 1]
-- [TODO: integrante 2]
-- [TODO: integrante 3]
-
-Equipo de 3 personas autorizado explícitamente por el profesor (fuera del default individual/parejas).
+- David Franco
+- Daniela Villamizar
+- Jaymar Murillo
 
 ## Problema
 
