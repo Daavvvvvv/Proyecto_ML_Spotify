@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr *)",
+      "mcp__ide__executeCode"
+    ]
+  }
+}
